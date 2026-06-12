@@ -4,27 +4,17 @@
 
 #include "Server.h"
 
-#include <condition_variable>
 #include <iostream>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <sys/select.h>
 #include <algorithm>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-
-void Server::enqueueTask(const Task& task) {
-    {
-        std::lock_guard<std::mutex> lock(taskMutex);
-        tasks.push_back(task);
-    }
-    taskCondition.notify_one();
-}
+#include <sys/event.h>
 
 bool Server::addClient(int clientSocket) {
-    std::lock_guard<std::mutex> lock(clientsMutex);
 
-    for (auto client : clientSockets) {
+    for (const auto client : clientSockets) {
         if (client == clientSocket) {
             std::cout << "[Server::addClient] Client is already connected\n";
             return false;
@@ -38,167 +28,93 @@ bool Server::addClient(int clientSocket) {
     return true;
 }
 
-void Server::removeClient(int clientSocket) {
-    std::lock_guard<std::mutex> lock(clientsMutex);
+void Server::removeClient(const int clientSocket) {
     const auto it = std::ranges::find(clientSockets, clientSocket);
     if (it == clientSockets.end()) {
         std::cerr << "[Server::removeClient] Client not found\n";
         return;
     }
     clientSockets.erase(it);
-    busyClients.erase(clientSocket);
     close(clientSocket);
     std::cout << "[Server::removeClient] Client with Socket " << clientSocket << " has been removed\n";
 }
 
 void Server::broadcastMessage(const Message& message) {
-    std::lock_guard<std::mutex> lock(clientsMutex);
-    for (auto client: clientSockets) {
+    std::vector<int> deadSockets {};
+    for (const auto client : clientSockets) {
         if (client != message.senderSocket) {
             if (send(client, message.text.data(), message.text.size(), 0) == -1) {
-                std::cerr << "[Server::broadcastMessage] Failed to send message to client "
-                << client << " from client " << message.senderSocket << "\n";
+                std::cerr << "[Server::broadcastMessage] Failed to send message\n";
+                deadSockets.push_back(client);
             }
         }
     }
+    for (const auto client : deadSockets) {
+        removeClient(client);
+    }
 }
-// Depends on clientSockets, clientsMutex, and send().
-// It loops through clients and sends to everyone except the sender.
-void Server::handleClient(int clientSocket) {
+
+void Server::handleClient(const int clientSocket) {
     char buffer[200];
-    ssize_t receivedBytes = recv(clientSocket, buffer, sizeof(buffer), 0);
-    if (receivedBytes == -1) {
+    if (const ssize_t receivedBytes = recv(clientSocket, buffer, sizeof(buffer), 0); receivedBytes == -1) {
         std::cerr << "[Server::handleClient] Failed to receive message from client " <<
             clientSocket << "\n";
     } else if (receivedBytes == 0) {
         std::cerr << "[Server::handleClient] Client disconnected\n";
         removeClient(clientSocket);
     } else {
-        std::string msg(buffer, receivedBytes);
+        const std::string msg(buffer, receivedBytes);
         const Message message (clientSocket, msg, Message::MessageType::Chat);
         broadcastMessage(message);
     }
-    std::lock_guard<std::mutex> lock(clientsMutex);
-    busyClients.erase(clientSocket);
-}
-
-void Server::workerLoop() {
-    while (true) {
-        Task task;
-
-        {
-            std::unique_lock<std::mutex> lock(taskMutex);
-            taskCondition.wait(lock, [this] {
-                return !tasks.empty() || !isRunning();
-            });
-
-            if (!isRunning() && tasks.empty()) {
-                return;
-            }
-
-            task = tasks.front();
-            tasks.pop_front();
-        }
-
-        if (task.type == Task::TaskType::ReadFromClient) {
-            handleClient(task.clientSocket);
-        } else if (task.type == Task::TaskType::BroadcastMessage) {
-            if (!task.message) {
-                std::cerr << "[Server::handleClient::broadcastMessage] Message is null\n";
-            } else {
-                broadcastMessage(task.message.value());
-            }
-        } else if (task.type == Task::TaskType::DisconnectClient) {
-            removeClient(task.clientSocket);
-        }
-    }
-}
-
-void Server::startWorkers() {
-    if (!workers.empty()) {
-        return;
-    } else if (!isRunning()) {
-        return;
-    }
-    for (std::size_t i {0}; i < maxThreads; i++) {
-        workers.emplace_back(&Server::workerLoop, this);
-    }
-
-}
-
-void Server::stopWorkers() {
-    if (workers.empty()) {
-        return;
-    }
-    for (auto i {0u}; i < workers.size(); i++) {
-        if (workers[i].joinable()) {
-            workers[i].join();
-        }
-    }
-    workers.clear();
 }
 
 void Server::acceptNewClient() {
-    int clientSocket = accept(serverSocket, nullptr, nullptr);
+    const int clientSocket = accept(serverSocket, nullptr, nullptr);
+    constexpr int opt {1};
     if (clientSocket == -1) {
         std::cerr << "[Server::acceptNewClient] Failed to accept client\n";
         return;
     }
-    if (!addClient(clientSocket))
-    {
+    setsockopt(clientSocket, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
+    if (!addClient(clientSocket)) {
         std::cerr << "[Server::acceptNewClient] Failed to add client\n";
         close(clientSocket);
+        return;
     }
+
+    struct kevent ev{};
+    EV_SET(&ev, clientSocket, EVFILT_READ, EV_ADD, 0, 0, nullptr);
+    if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
+        std::cerr << "[Server::acceptNewClient] Failed to add event to kqueue\n";
+        removeClient(clientSocket);
+    }
+
 }
 
 void Server::eventLoop() {
     while (isRunning())
     {
-        std::vector<int> watched;
-        {
-            std::lock_guard<std::mutex> lock(clientsMutex);
-            for (auto client : clientSockets) {
+        struct kevent events[64];
 
-                if (busyClients.find(client) == busyClients.end()) {
+        const int n = kevent(kq, nullptr, 0, events, 64, nullptr);
 
-                    watched.push_back(client);
-                }
-            }
-        }
-        fd_set readSet;
-        FD_ZERO(&readSet);
-        FD_SET(serverSocket, &readSet);
-        int maxFd = serverSocket;
-        for (auto sock : watched) {
-            FD_SET(sock, &readSet);
-            maxFd = std::max(maxFd, sock);
-        }
-
-        timeval tv {};
-        tv.tv_sec = 0;
-        tv.tv_usec = 100'000;
-
-        int ready = select(maxFd + 1, &readSet, nullptr, nullptr, &tv);
-
-        if (ready == -1) {
-            std::cerr << "[Server::eventLoop] Failed to select client socket\n";
+        if (n == -1) {
+            std::cerr << "[Server::eventLoop] Failed to get events\n";
             continue;
         }
-        if (ready == 0) {
-            continue;   //timeout
+        if (n == 0) {
+            continue;
         }
-        // New connection
-        if (FD_ISSET(serverSocket, &readSet)) {
-            acceptNewClient();
-        }
-
-        for (int sock : watched) {
-            if (FD_ISSET(sock, &readSet)) {
-                {
-                    std::lock_guard<std::mutex> lock(clientsMutex);
-                    busyClients.insert(sock);
-                }
-                enqueueTask(Task(sock, Task::TaskType::ReadFromClient));
+        for (int i = 0; i < n; ++i) {
+            if (events[i].filter == EVFILT_USER) {
+                return;
+            } if (const int fd = static_cast<int>(events[i].ident); fd == serverSocket) {
+                acceptNewClient();
+            } else if (events[i].flags & EV_EOF) {
+                removeClient(fd);   //client hung up, disconnect them
+            } else {
+                handleClient(fd);
             }
         }
     }
@@ -215,8 +131,8 @@ void Server::start() {
         std::cerr << "[Server::start] Failed to create server socket\n";
         return;
     }
-    int opt {1};
-    setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    constexpr int opt {1};
+    setsockopt(serverSocket, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -224,6 +140,8 @@ void Server::start() {
 
     if (inet_pton(AF_INET, ip.c_str(), &addr.sin_addr) != 1) {
         std::cerr << "[Server::start] Failed to parse ip address\n";
+        close(serverSocket);
+        serverSocket = -1;
         return;
     }
     if (bind(serverSocket, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == -1)
@@ -240,30 +158,60 @@ void Server::start() {
         serverSocket = -1;
         return;
     }
+    kq = kqueue();
+    if (kq == -1) {
+        std::cerr << "[Server::start] Failed to create kqueue\n";
+        close(serverSocket);
+        serverSocket = -1;
+        return;
+    }
+
+    struct kevent ev{};
+    EV_SET(&ev, serverSocket, EVFILT_READ, EV_ADD, 0, 0, nullptr);
+
+    if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
+        std::cerr << "[Server::start] Failed to add event to kqueue\n";
+        close(serverSocket);
+        serverSocket = -1;
+        close(kq);
+        kq = -1;
+        return;
+    }
+    EV_SET(&ev, 1, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, nullptr);
+    if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
+        std::cerr << "[Server::start] Failed to register shutdown event\n";
+        close(serverSocket);
+        serverSocket = -1;
+        close(kq);
+        kq = -1;
+        return;
+    }
     running = true;
-    startWorkers();
     eventThread = std::thread(&Server::eventLoop, this);
 }
 
 void Server::stop() {
     running = false;
+    struct kevent ev {};
+    EV_SET(&ev, 1, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr);
+    kevent(kq, &ev, 1, nullptr, 0, nullptr);
     if (eventThread.joinable()) {
         eventThread.join();
     }
-    taskCondition.notify_all();
-    stopWorkers();
     {
-        std::lock_guard<std::mutex> lock(clientsMutex);
-        for (auto client : clientSockets) {
+        for (const auto client : clientSockets) {
             close(client);
         }
 
         clientSockets.clear();
-        busyClients.clear();
     }
 
     if (serverSocket != -1) {
         close(serverSocket);
         serverSocket = -1;
+    }
+    if (kq != -1) {
+        close(kq);
+        kq = -1;
     }
 }

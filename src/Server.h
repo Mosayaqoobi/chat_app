@@ -6,38 +6,25 @@
 #define LEARN_CPP_SERVER_H
 
 #include <atomic>
-#include <deque>
-#include <condition_variable>
 #include <string>
 #include <thread>
 #include <vector>
-#include <mutex>
-#include <unordered_set>
 #include <utility>
 #include "Message.h"
-#include "Task.h"
 
 
 class Server {
     std::string ip {};
     int port {};
     std::size_t maxClients {100};
-    std::size_t maxThreads {10};
 
     int serverSocket {-1};  //when making a socket instance
     std::vector<int> clientSockets {};
 
-    // Protects against adding, removing and handling clients
-    std::mutex clientsMutex;
-    // Protects against pushing and popping from queue, and chacking whether queue is empty
-    std::mutex taskMutex;
-    std::vector<std::thread> workers {};
-    std::deque<Task> tasks {};
-    std::condition_variable taskCondition;
-    std::unordered_set<int> busyClients;
-
     std::atomic<bool> running {false};
     std::thread eventThread;
+
+    int kq {-1};
 
 public:
     Server(std::string ip, const int port) :
@@ -45,79 +32,58 @@ public:
     port(port) {};
 
     /*
-     * Creates the server socket, binds, listens, starts worker threads, and begins accepting clients
-     * Basically the main function
+     * Creates the server socket, binds, listens, sets up kqueue,
+     * and starts the event loop on a background thread.
      */
     void start();
 
     /*
-     * Shuts down the server, closes the sockets and stops the workers
+     * Signals shutdown, wakes the event loop, joins the event thread,
+     * and closes all client sockets, the server socket, and the kqueue.
      */
     void stop();
 
     /*
-     * Watches serverSocket + all client sockets with select().
-     * Accepts new clients when serverSocket is readable,
-     * enqueues ReadFromClient tasks when a client socket is readable.
+     * Blocks on kqueue until a socket is ready or shutdown is requested.
+     * Accepts new clients, reads incoming messages, and removes disconnected clients.
      */
     void eventLoop();
 
     /*
-     * Accepts one pending connection (only called when select says it's ready)
+     * Accepts one pending connection when the listening socket is readable.
+     * Registers the new client with kqueue and adds it to clientSockets.
      */
     void acceptNewClient();
 
     /*
-     * Stores a newly accept client socket
+     * Adds a client socket to clientSockets if it is not already present
+     * and the client limit has not been reached.
+     * Returns false if the client could not be added.
      */
     bool addClient(int clientSocket);
 
     /*
-     * Removes a client socket from the list
+     * Removes a client socket from clientSockets and closes it.
+     * Closing the socket also removes it from kqueue.
      */
     void removeClient(int clientSocket);
 
     /*
-     * Sends one clients message to every other connected client
+     * Sends a message to every connected client except the sender.
+     * Removes any clients whose send() fails.
      */
     void broadcastMessage(const Message& message);
 
     /*
-     * Handles reading messages from one client, then forwarding it to other clients
+     * Reads one message from a client socket and broadcasts it to the others.
+     * Removes the client if recv() indicates a disconnect or error.
      */
     void handleClient(int clientSocket);
 
-
     /*
-     * Getter for the state of the server
+     * Returns whether the server is currently running.
      */
     [[nodiscard]] bool isRunning() const { return running; }
-
-    /*
-     * creates maxWorkers worker threads
-     */
-    void startWorkers();
-
-    /*
-     * Stops/joins the workers
-     */
-    void stopWorkers();
-
-    /*
-     * what each worker thread runs (its task)
-     */
-    void workerLoop();
-
-    /*
-     * adds work to the shared queue
-     * tasks given by clients to:
-     * Send messages between clients
-     * remove clients
-     * add clients
-     * broadcast messages
-     * receive messages
-     */
-    void enqueueTask(const Task& task);
 };
 
 #endif //LEARN_CPP_SERVER_H

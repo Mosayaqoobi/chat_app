@@ -4,6 +4,9 @@
 
 #ifndef LEARN_CPP_CLIENT_H
 #define LEARN_CPP_CLIENT_H
+
+
+#include <atomic>
 #include <string>
 #include <utility>
 
@@ -12,7 +15,7 @@ class Client {
     std::string serverIp {};
     int serverPort {};
     int clientSocket {-1};
-    bool connected {false};
+    std::atomic<bool> connected {false};
 
 public:
     Client(std::string username, std::string serverIp, const int serverPort) :

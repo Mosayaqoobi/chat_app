@@ -36,6 +36,9 @@ int main() {
     std::thread receiver([&client] {
         while (client.isConnected()) {
             std::string msg = client.receiveMessage();
+            if (!client.isConnected()) {
+                break;
+            }
             if (!msg.empty()) {
                 std::cout << msg << "\n";
             }
@@ -53,6 +56,7 @@ int main() {
         if (line.length() > 200)
         {
             std::cerr << "Message is too long (max 200 characters) \n";
+            continue;
         }
         if (!client.sendMessage(line)) {
             std::cerr << "Failed to send message\n";

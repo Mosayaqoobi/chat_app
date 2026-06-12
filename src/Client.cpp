@@ -11,12 +11,12 @@
 #include <sys/socket.h>
 
 void Client::disconnect() {
+    connected = false;
     if (clientSocket != -1) {
         shutdown(clientSocket, SHUT_RDWR);
         close(clientSocket);
+        clientSocket = -1;
     }
-    connected = false;
-    clientSocket = -1;
 }
 
 
@@ -78,7 +78,7 @@ std::string Client::receiveMessage() {
     ssize_t bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
 
     if (bytesReceived == -1) {
-        std::cerr << "Failed to receive message\n";
+        disconnect();
         return "";
     } else if (bytesReceived == 0) {
         std::cerr << "server disconnected\n";
