@@ -2,8 +2,7 @@
 // Created by Mosa Yaqoobi on 2026-06-07.
 //
 
-#ifndef LEARN_CPP_MESSAGE_H
-#define LEARN_CPP_MESSAGE_H
+#pragma once
 
 #include <string>
 #include <utility>
@@ -30,6 +29,3 @@ public:
         type(type) {};
 
 };
-
-
-#endif //LEARN_CPP_MESSAGE_H

@@ -3,6 +3,7 @@
 //
 
 #include "Server.h"
+#include "Constants.h"
 
 #include <iostream>
 #include <unistd.h>
@@ -11,6 +12,12 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/event.h>
+
+namespace {
+    constexpr int eventBatchSize = 64;  //batch size for kevents in a kqueue
+    constexpr int shutdownEventIdent = 1;
+    constexpr int socketOptionEnabled = 1;
+}
 
 bool Server::addClient(int clientSocket) {
 
@@ -55,7 +62,7 @@ void Server::broadcastMessage(const Message& message) {
 }
 
 void Server::handleClient(const int clientSocket) {
-    char buffer[200];
+    char buffer[chat::kMaxMessageSize];
     if (const ssize_t receivedBytes = recv(clientSocket, buffer, sizeof(buffer), 0); receivedBytes == -1) {
         std::cerr << "[Server::handleClient] Failed to receive message from client " <<
             clientSocket << "\n";
@@ -71,12 +78,11 @@ void Server::handleClient(const int clientSocket) {
 
 void Server::acceptNewClient() {
     const int clientSocket = accept(serverSocket, nullptr, nullptr);
-    constexpr int opt {1};
     if (clientSocket == -1) {
         std::cerr << "[Server::acceptNewClient] Failed to accept client\n";
         return;
     }
-    setsockopt(clientSocket, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
+    setsockopt(clientSocket, SOL_SOCKET, SO_NOSIGPIPE, &socketOptionEnabled, sizeof(socketOptionEnabled));
     if (!addClient(clientSocket)) {
         std::cerr << "[Server::acceptNewClient] Failed to add client\n";
         close(clientSocket);
@@ -95,9 +101,9 @@ void Server::acceptNewClient() {
 void Server::eventLoop() {
     while (isRunning())
     {
-        struct kevent events[64];
+        struct kevent events[eventBatchSize];
 
-        const int n = kevent(kq, nullptr, 0, events, 64, nullptr);
+        const int n = kevent(kq, nullptr, 0, events, eventBatchSize, nullptr);
 
         if (n == -1) {
             std::cerr << "[Server::eventLoop] Failed to get events\n";
@@ -131,8 +137,7 @@ void Server::start() {
         std::cerr << "[Server::start] Failed to create server socket\n";
         return;
     }
-    constexpr int opt {1};
-    setsockopt(serverSocket, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
+    setsockopt(serverSocket, SOL_SOCKET, SO_NOSIGPIPE, &socketOptionEnabled, sizeof(socketOptionEnabled));
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -177,7 +182,7 @@ void Server::start() {
         kq = -1;
         return;
     }
-    EV_SET(&ev, 1, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, nullptr);
+    EV_SET(&ev, shutdownEventIdent, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, nullptr);
     if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
         std::cerr << "[Server::start] Failed to register shutdown event\n";
         close(serverSocket);
@@ -193,7 +198,7 @@ void Server::start() {
 void Server::stop() {
     running = false;
     struct kevent ev {};
-    EV_SET(&ev, 1, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr);
+    EV_SET(&ev, shutdownEventIdent, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr);
     kevent(kq, &ev, 1, nullptr, 0, nullptr);
     if (eventThread.joinable()) {
         eventThread.join();

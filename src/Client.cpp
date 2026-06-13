@@ -3,6 +3,7 @@
 //
 
 #include "Client.h"
+#include "Constants.h"
 
 #include <iostream>
 #include <unistd.h>
@@ -60,7 +61,7 @@ bool Client::sendMessage(const std::string &message) const {
     } else if (message.empty()) {
         std::cerr << "Message is empty\n";
         return false;
-    } else if (message.length() > 200) {
+    } else if (message.length() > chat::kMaxMessageSize) {
         std::cerr << "Message too long\n";
         return false;
     } else if (send(clientSocket, message.data(), message.size(), 0) == -1) {
@@ -74,7 +75,7 @@ std::string Client::receiveMessage() {
         std::cerr << "Client is not connected\n";
         return "";
     }
-    char buffer[200];
+    char buffer[chat::kMaxMessageSize];
     ssize_t bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
 
     if (bytesReceived == -1) {

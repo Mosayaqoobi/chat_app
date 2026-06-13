@@ -2,21 +2,21 @@
 // Created by Mosa Yaqoobi on 2026-06-07.
 //
 
-#ifndef LEARN_CPP_SERVER_H
-#define LEARN_CPP_SERVER_H
+#pragma once
 
 #include <atomic>
+#include <cstddef>
 #include <string>
 #include <thread>
 #include <vector>
 #include <utility>
 #include "Message.h"
 
-
 class Server {
+    static constexpr std::size_t kMaxClients = 100;
     std::string ip {};
     int port {};
-    std::size_t maxClients {100};
+    std::size_t maxClients {kMaxClients};
 
     int serverSocket {-1};  //when making a socket instance
     std::vector<int> clientSockets {};
@@ -85,5 +85,3 @@ public:
      */
     [[nodiscard]] bool isRunning() const { return running; }
 };
-
-#endif //LEARN_CPP_SERVER_H

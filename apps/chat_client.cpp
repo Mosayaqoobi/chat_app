@@ -5,6 +5,8 @@
 //contains the main for starting a client
 
 #include "Client.h"
+#include "Constants.h"
+
 #include <iostream>
 #include <thread>
 
@@ -47,15 +49,15 @@ int main() {
 
     std::string line;
     while (std::getline(std::cin, line)) {
-        if (line == "/quit") {
+        if (line == chat::kQuitCommand) {
             break;
         }
         if (line.empty()) {
             continue;
         }
-        if (line.length() > 200)
+        if (line.length() > chat::kMaxMessageSize)
         {
-            std::cerr << "Message is too long (max 200 characters) \n";
+            std::cerr << "Message is too long (max " << chat::kMaxMessageSize << " characters) \n";
             continue;
         }
         if (!client.sendMessage(line)) {

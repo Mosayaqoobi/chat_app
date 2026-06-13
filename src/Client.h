@@ -2,9 +2,7 @@
 // Created by Mosa Yaqoobi on 2026-06-07.
 //
 
-#ifndef LEARN_CPP_CLIENT_H
-#define LEARN_CPP_CLIENT_H
-
+#pragma once
 
 #include <atomic>
 #include <string>
@@ -38,5 +36,3 @@ public:
     void disconnect();
 
 };
-
-#endif //LEARN_CPP_CLIENT_H

@@ -4,10 +4,15 @@
 // contains the main for starting the server
 
 #include "Server.h"
+#include "Constants.h"
+
 #include <iostream>
 
 int main() {
-    Server server{"127.0.0.1", 8080};
+    constexpr auto kDefaultHost = "127.0.0.1";
+    constexpr auto kDefaultPort = 8080;
+
+    Server server{kDefaultHost, kDefaultPort};
     server.start();
 
     if (!server.isRunning()) {
@@ -17,7 +22,7 @@ int main() {
 
     std::string line;
     while (std::getline(std::cin, line)) {
-        if (line == "/quit") {
+        if (line == chat::kQuitCommand) {
             break;
         }
     }
