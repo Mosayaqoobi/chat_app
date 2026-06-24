@@ -1,11 +1,10 @@
-
 //
-// Created by Mosa Yaqoobi on 2026-06-07.
+// Created by Mosa Yaqoobi on 2026-06-23.
 //
 //contains the main for starting a client
 
 #include "Client.h"
-#include "Constants.h"
+#include "chat/Constants.h"
 
 #include <iostream>
 #include <thread>

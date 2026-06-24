@@ -4,13 +4,15 @@
 
 #pragma once
 
+#include "chat/Message.h"
+
 #include <atomic>
 #include <cstddef>
 #include <string>
 #include <thread>
 #include <vector>
 #include <utility>
-#include "Message.h"
+
 
 class Server {
     static constexpr std::size_t kMaxClients = 100;
