@@ -54,23 +54,30 @@ int main() {
     });
 
     std::string line;
+    auto showPrompt = [] {std::print(">> "); };
+    showPrompt();
+
     while (std::getline(std::cin, line)) {
         if (line == chat::kQuitCommand) {
             break;
         }
         if (line.empty()) {
+            showPrompt();
             continue;
         }
         if (line.length() > chat::kMaxMessageSize)
         {
             std::print("Message is too long (max {} characters)\n", chat::kMaxMessageSize);
             log->warn("rejecting oversized message ({} chars)", line.length());
+            showPrompt();
             continue;
         }
         if (!client.sendMessage(line)) {
             log->error("Failed to send message");
+            showPrompt();
             break;
         }
+        showPrompt();
     }
     client.disconnect();
     receiver.join();

@@ -32,6 +32,7 @@ bool Server::addClient(int clientSocket) {
         return false;
     }
     clientSockets.push_back(clientSocket);
+    std::cerr << "[Server::addClient]" << "Client " << clientSocket << " has joined the server\n";
     return true;
 }
 
