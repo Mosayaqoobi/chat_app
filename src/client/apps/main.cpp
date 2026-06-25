@@ -5,20 +5,27 @@
 
 #include "Client.h"
 #include "chat/Constants.h"
+#include "chat/Logging.h"
 
 #include <iostream>
 #include <thread>
+#include <print>
 
 
 int main() {
+    chat::initLogging();
+    auto log = chat::clientLogger();
+
     std::string username;
     std::string ip;
     std::string portStr;
-    std::cout << "Enter username: ";
+
+
+    std::print("Enter username: ");
     std::getline(std::cin, username);
-    std::cout << "Enter the IP: ";
+    std::print("Enter the IP: ");
     std::getline(std::cin, ip);
-    std::cout << "Enter port number: ";
+    std::print("Enter port number: ");
     std::getline(std::cin, portStr);
     const int port = std::stoi(portStr);
 
@@ -28,11 +35,11 @@ int main() {
     client.connectToServer();
 
     if (!client.isConnected()) {
-        std::cerr << "Failed to connect to server\n";
+        log->error("Failed to connect to server");
         return 1;
     }
-
-    std::cout << "Connected. Type messages, or /quit to exit. \n";
+    std::print("Connected, Type message, or /quit to exit\n");
+    log->debug("Client [{}], connected to server {}:{}", client.getSocket(), ip, port);
 
     std::thread receiver([&client] {
         while (client.isConnected()) {
@@ -56,19 +63,16 @@ int main() {
         }
         if (line.length() > chat::kMaxMessageSize)
         {
-            std::cerr << "Message is too long (max " << chat::kMaxMessageSize << " characters) \n";
+            std::print("Message is too long (max {} characters)\n", chat::kMaxMessageSize);
+            log->warn("rejecting oversized message ({} chars)", line.length());
             continue;
         }
         if (!client.sendMessage(line)) {
-            std::cerr << "Failed to send message\n";
+            log->error("Failed to send message");
             break;
         }
     }
     client.disconnect();
     receiver.join();
     return 0;
-
-
-
-
 }
