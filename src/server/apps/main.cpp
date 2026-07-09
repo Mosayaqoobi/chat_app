@@ -5,6 +5,7 @@
 
 #include "Server.h"
 #include "chat/Constants.h"
+#include "chat/Message.h"
 
 #include <iostream>
 
@@ -23,6 +24,10 @@ int main() {
     std::string line;
     while (std::getline(std::cin, line)) {
         if (line == chat::kQuitCommand) {
+            server.broadcastMessage(Message(server.getServerSocket(),
+                "Server has disconnected, quitting you out",
+                Message::MessageType::Leave
+                ));
             break;
         }
     }

@@ -86,4 +86,9 @@ public:
      * Returns whether the server is currently running.
      */
     [[nodiscard]] bool isRunning() const { return running; }
+
+    /*
+     * Returns the serverSocket
+     */
+    [[nodiscard]] int getServerSocket() const { return serverSocket; }
 };

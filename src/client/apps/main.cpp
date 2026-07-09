@@ -48,8 +48,10 @@ int main() {
                 break;
             }
             if (!msg.empty()) {
-                std::cout << msg << "\n";
-            }
+                std::cout << "\r\033[K"
+                << msg << "\n"
+                << ">> " << std::flush;
+}
         }
     });
 

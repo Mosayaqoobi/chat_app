@@ -45,7 +45,7 @@ void Server::removeClient(const int clientSocket) {
     clientSockets.erase(it);
     close(clientSocket);
     const Message leaveMsg(clientSocket,
-        "Client " + std::to_string(clientSocket) + " has disconnected\n",
+        "Client " + std::to_string(clientSocket) + " has disconnected",
         Message::MessageType::Leave);
     broadcastMessage(leaveMsg);
     std::cout << "[Server::removeClient] Client with Socket " << clientSocket << " has been removed\n";
@@ -75,7 +75,7 @@ void Server::handleClient(const int clientSocket) {
 
     } else if (receivedBytes == 0) {
         const Message leaveMsg(clientSocket,
-            "Client " + std::to_string(clientSocket) + " has disconnected\n",
+            "Client " + std::to_string(clientSocket) + " has disconnected",
             Message::MessageType::Leave);
         std::cerr << "[Server::handleClient] Client disconnected\n";
         broadcastMessage(leaveMsg);
