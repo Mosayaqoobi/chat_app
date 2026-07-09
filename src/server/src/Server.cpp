@@ -19,7 +19,7 @@ namespace {
     constexpr int socketOptionEnabled = 1;
 }
 
-bool Server::addClient(int clientSocket) {
+bool Server::addClient(const int clientSocket) {
 
     for (const auto client : clientSockets) {
         if (client == clientSocket) {
@@ -32,7 +32,7 @@ bool Server::addClient(int clientSocket) {
         return false;
     }
     clientSockets.push_back(clientSocket);
-    std::cerr << "[Server::addClient]" << "Client " << clientSocket << " has joined the server\n";
+    std::cerr << "[Server::addClient]" << " Client " << clientSocket << " has joined the server\n";
     return true;
 }
 
@@ -44,7 +44,12 @@ void Server::removeClient(const int clientSocket) {
     }
     clientSockets.erase(it);
     close(clientSocket);
+    const Message leaveMsg(clientSocket,
+        "Client " + std::to_string(clientSocket) + " has disconnected\n",
+        Message::MessageType::Leave);
+    broadcastMessage(leaveMsg);
     std::cout << "[Server::removeClient] Client with Socket " << clientSocket << " has been removed\n";
+
 }
 
 void Server::broadcastMessage(const Message& message) {
@@ -67,9 +72,15 @@ void Server::handleClient(const int clientSocket) {
     if (const ssize_t receivedBytes = recv(clientSocket, buffer, sizeof(buffer), 0); receivedBytes == -1) {
         std::cerr << "[Server::handleClient] Failed to receive message from client " <<
             clientSocket << "\n";
+
     } else if (receivedBytes == 0) {
+        const Message leaveMsg(clientSocket,
+            "Client " + std::to_string(clientSocket) + " has disconnected\n",
+            Message::MessageType::Leave);
         std::cerr << "[Server::handleClient] Client disconnected\n";
+        broadcastMessage(leaveMsg);
         removeClient(clientSocket);
+
     } else {
         const std::string msg(buffer, receivedBytes);
         const Message message (clientSocket, msg, Message::MessageType::Chat);
