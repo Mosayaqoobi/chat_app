@@ -6,7 +6,7 @@
 #include "Server.h"
 
 TEST(ServerTest, AddClientRejectsDuplicate) {
-    Server server("127.0.0.1", 8080);
+    Server server({.ip="127.0.0.1", .port=8080});
 
     EXPECT_TRUE(server.addClient(3));
     EXPECT_FALSE(server.addClient(3));

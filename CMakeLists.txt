@@ -13,6 +13,6 @@ find_package(Threads REQUIRED)
 
 enable_testing()
 
-add_subdirectory(src/common)
-add_subdirectory(src/client)
-add_subdirectory(src/server)
+add_subdirectory(common)
+add_subdirectory(client)
+add_subdirectory(server)

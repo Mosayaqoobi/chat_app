@@ -5,7 +5,6 @@
 
 #include "Server.h"
 #include "chat/Constants.h"
-#include "chat/Message.h"
 
 #include <iostream>
 
@@ -13,7 +12,7 @@ int main() {
     constexpr auto kDefaultHost = "127.0.0.1";
     constexpr auto kDefaultPort = 8080;
 
-    Server server{kDefaultHost, kDefaultPort};
+    Server server{{.ip = kDefaultHost, .port = kDefaultPort}};
     server.start();
 
     if (!server.isRunning()) {
@@ -24,14 +23,10 @@ int main() {
     std::string line;
     while (std::getline(std::cin, line)) {
         if (line == chat::kQuitCommand) {
-            server.broadcastMessage(Message(server.getServerSocket(),
-                "Server has disconnected, quitting you out",
-                Message::MessageType::Leave
-                ));
             break;
         }
     }
-    server.stop();
+    server.stop("Server has disconnected, quitting you out");
     return 0;
 
 }

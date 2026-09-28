@@ -6,6 +6,7 @@
 #include "Client.h"
 #include "chat/Constants.h"
 #include "chat/Logging.h"
+#include "chat/Endpoint.h"
 
 #include <iostream>
 #include <thread>
@@ -17,20 +18,22 @@ int main() {
     auto log = chat::clientLogger();
 
     std::string username;
-    std::string ip;
+    std::string ipStr;
     std::string portStr;
-
 
     std::print("Enter username: ");
     std::getline(std::cin, username);
     std::print("Enter the IP: ");
-    std::getline(std::cin, ip);
+    std::getline(std::cin, ipStr);
     std::print("Enter port number: ");
     std::getline(std::cin, portStr);
-    const int port = std::stoi(portStr);
 
-
-    Client client {username, ip, port};
+    auto endpoint = chat::Endpoint::parse(ipStr, portStr);
+    if (!endpoint) {
+        std::print("Invalid address {}:{}\n", ipStr, portStr);
+        return 1;
+    }
+    Client client {username, (endpoint.value())};
 
     client.connectToServer();
 
@@ -39,7 +42,7 @@ int main() {
         return 1;
     }
     std::print("Connected, Type message, or /quit to exit\n");
-    log->debug("Client [{}], connected to server {}:{}", client.getSocket(), ip, port);
+    log->debug("Client [{}], connected to server {}:{}", client.getSocket(), endpoint->ip, endpoint->port);
 
     std::thread receiver([&client] {
         while (client.isConnected()) {

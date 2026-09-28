@@ -4,6 +4,8 @@ cmake-build-*/
 
 # IDE
 .idea/
+.venv
+.cache
 
 # macOS
 .DS_Store

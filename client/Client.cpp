@@ -3,7 +3,6 @@
 //
 
 #include "Client.h"
-#include "chat/Constants.h"
 
 #include <iostream>
 #include <unistd.h>
@@ -12,11 +11,11 @@
 #include <sys/socket.h>
 
 void Client::disconnect() {
-    connected = false;
-    if (clientSocket != -1) {
-        shutdown(clientSocket, SHUT_RDWR);
-        close(clientSocket);
-        clientSocket = -1;
+    connected_ = false;
+    if (clientSocket_ != -1) {
+        shutdown(clientSocket_, SHUT_RDWR);
+        close(clientSocket_);
+        clientSocket_ = -1;
     }
 }
 
@@ -28,34 +27,34 @@ void Client::connectToServer() {
         return;
     }
     // Create Socket
-    clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    clientSocket_ = socket(AF_INET, SOCK_STREAM, 0);
 
-    if (clientSocket == -1) {
+    if (clientSocket_ == -1) {
         std::cerr << "Error: Failed to create Client Socket\n";
         return;
     }
 
     sockaddr_in serverAddress {};
     serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(serverPort);
+    serverAddress.sin_port = htons(server_.port);
 
 
-    if (inet_pton(AF_INET, serverIp.c_str(), &serverAddress.sin_addr) != 1) {
+    if (inet_pton(AF_INET, server_.ip.c_str(), &serverAddress.sin_addr) != 1) {
         std::cerr << "Invalid server Address\n";
         disconnect();
         return;
     }
 
-    if (connect(clientSocket, reinterpret_cast<sockaddr*>(&serverAddress), sizeof(serverAddress)) == -1) {
+    if (connect(clientSocket_, reinterpret_cast<sockaddr*>(&serverAddress), sizeof(serverAddress)) == -1) {
         std::cerr << "Error: Failed to Connect to Server\n";
         disconnect();
         return;
     }
-    connected = true;
+    connected_ = true;
 }
 
 bool Client::sendMessage(const std::string &message) const {
-    if (!isConnected() || clientSocket == -1) {
+    if (!isConnected() || clientSocket_ == -1) {
         std::cerr << "Client is not connected\n";
         return false;
     } else if (message.empty()) {
@@ -64,19 +63,19 @@ bool Client::sendMessage(const std::string &message) const {
     } else if (message.length() > chat::kMaxMessageSize) {
         std::cerr << "Message too long\n";
         return false;
-    } else if (send(clientSocket, message.data(), message.size(), 0) == -1) {
+    } else if (send(clientSocket_, message.data(), message.size(), 0) == -1) {
         std::cerr << "Failed to send message\n";
         return false;
     }
     return true;
 }
 std::string Client::receiveMessage() {
-    if (!isConnected() || clientSocket == -1) {
+    if (!isConnected() || clientSocket_ == -1) {
         std::cerr << "Client is not connected\n";
         return "";
     }
     char buffer[chat::kMaxMessageSize];
-    ssize_t bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+    ssize_t bytesReceived = recv(clientSocket_, buffer, sizeof(buffer), 0);
 
     if (bytesReceived == -1) {
         disconnect();

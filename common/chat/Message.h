@@ -9,7 +9,7 @@
 
 class Message {
 public:
-    int senderSocket{};
+    int senderSocket {};
     std::string text;
 
 
@@ -18,6 +18,7 @@ public:
         Join,
         Leave,
     };
+
     MessageType type {};
 
     /*

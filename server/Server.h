@@ -5,33 +5,24 @@
 #pragma once
 
 #include "chat/Message.h"
+#include "chat/Endpoint.h"
 
-#include <atomic>
-#include <cstddef>
-#include <string>
+#include <unordered_set>
 #include <thread>
-#include <vector>
+#include <atomic>
+#include <string>
 #include <utility>
 
 
 class Server {
-    static constexpr std::size_t kMaxClients = 100;
-    std::string ip {};
-    int port {};
-    std::size_t maxClients {kMaxClients};
-
-    int serverSocket {-1};  //when making a socket instance
-    std::vector<int> clientSockets {};
-
-    std::atomic<bool> running {false};
-    std::thread eventThread;
-
-    int kq {-1};
-
 public:
-    Server(std::string ip, const int port) :
-    ip(std::move(ip)),
-    port(port) {};
+    explicit Server(chat::Endpoint bindAddress) :
+        bindAddress_(std::move(bindAddress)) {}
+
+    ~Server() { stop(); }
+
+    Server(const Server&) = delete;
+    Server& operator=(const Server&) = delete;
 
     /*
      * Creates the server socket, binds, listens, sets up kqueue,
@@ -43,7 +34,7 @@ public:
      * Signals shutdown, wakes the event loop, joins the event thread,
      * and closes all client sockets, the server socket, and the kqueue.
      */
-    void stop();
+    void stop(const std::string& farewell = "");
 
     /*
      * Blocks on kqueue until a socket is ready or shutdown is requested.
@@ -70,6 +61,8 @@ public:
      */
     void removeClient(int clientSocket);
 
+    void dropClient(const int clientSocket);
+
     /*
      * Sends a message to every connected client except the sender.
      * Removes any clients whose send() fails.
@@ -85,10 +78,23 @@ public:
     /*
      * Returns whether the server is currently running.
      */
-    [[nodiscard]] bool isRunning() const { return running; }
+    [[nodiscard]] bool isRunning() const { return running_; }
 
     /*
      * Returns the serverSocket
      */
-    [[nodiscard]] int getServerSocket() const { return serverSocket; }
+    [[nodiscard]] int getServerSocket() const { return serverSocket_; }
+private:
+    static constexpr std::size_t kMaxClients = 10000;
+    chat::Endpoint bindAddress_;
+
+    std::size_t maxClients_ {kMaxClients};
+
+    int serverSocket_ {-1};  //when making a socket instance
+    std::unordered_set<int> clientSockets_{};
+
+    std::atomic<bool> running_ {false};
+    std::thread eventThread_{};
+
+    int kq_ {-1};
 };
