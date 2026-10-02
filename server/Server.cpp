@@ -9,7 +9,7 @@
 #include <vector>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <sys/event.h>
 #include <cerrno>
@@ -144,35 +144,49 @@ void Server::eventLoop() {
 
 }
 
+
 void Server::start() {
     if (isRunning()) {
         return;
     }
+    addrinfo hints {}, *res {}, *p{};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE | AI_NUMERICHOST | AI_NUMERICSERV;
 
-    serverSocket_ = socket(AF_INET, SOCK_STREAM, 0);
+    if (int stat {}; (stat = getaddrinfo(nullptr, std::to_string(port_).c_str(), &hints, &res)) != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(stat));
+        return;
+    }
+
+    for (p = res; p != nullptr; p = p->ai_next) {
+        if ((serverSocket_ = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+            std::cerr << "[Server::start] Failed to create server socket\n";
+            continue;
+        }
+
+        if (setsockopt(serverSocket_, SOL_SOCKET, SO_NOSIGPIPE, &socketOptionEnabled, sizeof(socketOptionEnabled))) {
+            close(serverSocket_);
+            std::cerr << "[Server::start] setsockopt failed: " << strerror(errno) << "\n";
+            serverSocket_ = -1;
+            continue;
+        }
+
+        if (bind(serverSocket_, p->ai_addr, p->ai_addrlen) == -1) {
+            close(serverSocket_);
+            serverSocket_ = -1;
+            std::cerr << "[Server::start] bind failed: " << strerror(errno) << "\n";
+            continue;
+        }
+        break;
+    }
+    freeaddrinfo(res);
+
     if (serverSocket_ == -1) {
-        std::cerr << "[Server::start] Failed to create server socket\n";
+        std::cerr << "[Server::start] Could not bind to port " << port_ << "\n";
         return;
     }
-    setsockopt(serverSocket_, SOL_SOCKET, SO_NOSIGPIPE, &socketOptionEnabled, sizeof(socketOptionEnabled));
 
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(bindAddress_.port);
-
-    if (inet_pton(AF_INET, bindAddress_.ip.c_str(), &addr.sin_addr) != 1) {
-        std::cerr << "[Server::start] Failed to parse ip address\n";
-        close(serverSocket_);
-        serverSocket_ = -1;
-        return;
-    }
-    if (bind(serverSocket_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == -1)
-    {
-        std::cerr << "[Server::start] Failed to bind server socket\n";
-        close(serverSocket_);
-        serverSocket_ = -1;
-        return;
-    }
     if (listen(serverSocket_, SOMAXCONN) == -1)
     {
         std::cerr << "[Server::start] Failed to listen on server socket\n";

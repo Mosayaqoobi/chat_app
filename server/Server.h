@@ -5,19 +5,17 @@
 #pragma once
 
 #include "chat/Message.h"
-#include "chat/Endpoint.h"
 
 #include <unordered_set>
 #include <thread>
 #include <atomic>
 #include <string>
-#include <utility>
 
 
 class Server {
 public:
-    explicit Server(chat::Endpoint bindAddress) :
-        bindAddress_(std::move(bindAddress)) {}
+    explicit Server(const uint16_t port) :
+        port_(port) {}
 
     ~Server() { stop(); }
 
@@ -86,7 +84,7 @@ public:
     [[nodiscard]] int getServerSocket() const { return serverSocket_; }
 private:
     static constexpr std::size_t kMaxClients = 10000;
-    chat::Endpoint bindAddress_;
+    uint16_t port_;
 
     std::size_t maxClients_ {kMaxClients};
 

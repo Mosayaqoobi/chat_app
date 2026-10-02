@@ -9,10 +9,9 @@
 #include <iostream>
 
 int main() {
-    constexpr auto kDefaultHost = "127.0.0.1";
     constexpr auto kDefaultPort = 8080;
 
-    Server server{{.ip = kDefaultHost, .port = kDefaultPort}};
+    Server server{kDefaultPort};
     server.start();
 
     if (!server.isRunning()) {

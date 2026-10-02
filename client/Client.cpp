@@ -5,8 +5,8 @@
 #include "Client.h"
 
 #include <iostream>
+#include <netdb.h>
 #include <unistd.h>
-#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 
@@ -26,28 +26,32 @@ void Client::connectToServer() {
         std::cout << "Client already Connected\n";
         return;
     }
-    // Create Socket
-    clientSocket_ = socket(AF_INET, SOCK_STREAM, 0);
+    addrinfo hints{}, *res{};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_NUMERICSERV;
+
+    const std::string port = std::to_string(server_.port);
+    if (int stat {}; (stat = getaddrinfo(server_.ip.c_str(), port.c_str(), &hints, &res)) != 0) {
+        std::cerr << "getaddrinfo: " << gai_strerror(stat) << "\n";
+        return;
+    }
+    for (const addrinfo* p = res; p != nullptr; p = p->ai_next) {
+        clientSocket_ = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (clientSocket_ == -1) {
+            continue;
+        }
+        if (connect(clientSocket_, p->ai_addr, p->ai_addrlen) == -1) {
+            close(clientSocket_);
+            clientSocket_ = -1;
+            continue;
+        }
+        break;
+    }
+    freeaddrinfo(res);
 
     if (clientSocket_ == -1) {
-        std::cerr << "Error: Failed to create Client Socket\n";
-        return;
-    }
-
-    sockaddr_in serverAddress {};
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(server_.port);
-
-
-    if (inet_pton(AF_INET, server_.ip.c_str(), &serverAddress.sin_addr) != 1) {
-        std::cerr << "Invalid server Address\n";
-        disconnect();
-        return;
-    }
-
-    if (connect(clientSocket_, reinterpret_cast<sockaddr*>(&serverAddress), sizeof(serverAddress)) == -1) {
         std::cerr << "Error: Failed to Connect to Server\n";
-        disconnect();
         return;
     }
     connected_ = true;
